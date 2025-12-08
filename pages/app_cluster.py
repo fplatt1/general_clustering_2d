@@ -3,6 +3,8 @@ import logging
 import numpy as np
 import streamlit as st
 from plotly import graph_objs as go
+import plotly.express as px
+import re
 
 try:
     from funktionen_streamlit import run_pca_dbscan_analysis, run_feature_engineering_k_mean_analysis, run_feature_engineering_som_analysis
@@ -36,86 +38,124 @@ def analyze(file_bytes, analysis_method: str):
 
 
 def plot_cluster_map(cluster_map, unique_labels):
-    # 1. Dimensionen holen
+    # 1. Dimensionen & Basis-Setup
     num_rows, num_cols = cluster_map.shape
-    
-    # Verhältnis berechnen, um die perfekte Breite zu finden
     aspect_ratio = num_cols / num_rows
-    
-    # Basis-Höhe festlegen
     base_height = 700
     calculated_width = int(base_height * aspect_ratio) + 120
+
+    # 2. Diskrete Farben aus Viridis generieren
+    unique_sorted = sorted(unique_labels)
+    n_clusters = len(unique_sorted)
+    
+    # Wir holen uns n_clusters Farben, gleichmäßig verteilt über die Viridis-Skala (0.0 bis 1.0)
+    # Das sorgt für den "Verlauf"-Look, aber mit diskreten Stufen.
+    viridis_samples = np.linspace(0, 1, n_clusters)
+    current_colors = px.colors.sample_colorscale("Viridis", viridis_samples)
+    
+    # Erstelle die "klötzchenhafte" colorscale für Plotly Heatmaps
+    discrete_colorscale = []
+    step = 1 / n_clusters
+    for i, color in enumerate(current_colors):
+        discrete_colorscale.append([i * step, color])       # Start des Blocks
+        discrete_colorscale.append([(i + 1) * step, color]) # Ende des Blocks
+
+    # Mapping der original Labels auf 0 bis n-1 für die Heatmap-Darstellung
+    label_to_idx = {label: i for i, label in enumerate(unique_sorted)}
+    mapped_cluster_map = np.vectorize(label_to_idx.get)(cluster_map)
 
     fig = go.Figure()
     fig.add_trace(
         go.Heatmap(
-            z=np.flipud(cluster_map),
-            colorscale="Viridis",
+            z=np.flipud(mapped_cluster_map), 
+            colorscale=discrete_colorscale,
+            zmin=0,
+            zmax=n_clusters, # Wichtig für die korrekten Block-Grenzen
             colorbar=dict(
-                title="Cluster",
+                title="Cluster ID",
                 title_side="top",
-                title_font=dict(size=28),   # Überschrift
-                tickfont=dict(size=20),     # Zahlen (0, 1, 2...)
+                title_font=dict(size=28),
+                tickfont=dict(size=20),
                 
                 tickmode='array',
-                tickvals=unique_labels,
-                ticktext=[str(l) for l in unique_labels],  # noqa: E741
+                # Ticks genau in die Mitte der Farbblöcke setzen:
+                tickvals=[x + 0.5 for x in range(n_clusters)], 
+                ticktext=[str(l) for l in unique_sorted],  # noqa: E741
                 
-                # Positionierung
-                xpad=0,         # Kein Abstand
-                thickness=40,   # Balken noch breiter für die große Schrift
-                len=1.0         
+                xpad=0,
+                thickness=40,
+                len=1.0
             )
         )
     )
     
-    # 2. Layout
+    # 3. Layout (unverändert)
     fig.update_layout(
         height=base_height,
         width=calculated_width, 
-        
-        # Ränder minimieren
-        margin=dict(l=10, r=10, t=60, b=10), # t=60 für Platz der großen Cluster-Überschrift
-
+        margin=dict(l=10, r=10, t=60, b=10),
         xaxis=dict(
             range=[0, num_cols - 1],
             constrain="domain",
-            showticklabels=False, 
-            ticks="",
-            showgrid=False,
-            zeroline=False
+            showticklabels=False, ticks="", showgrid=False, zeroline=False
         ),
-        
         yaxis=dict(
-            scaleanchor="x", 
-            scaleratio=1,
+            scaleanchor="x", scaleratio=1,
             range=[0, num_rows - 1],
             constrain="domain",
-            showticklabels=False, 
-            ticks="",
-            showgrid=False,
-            zeroline=False
+            showticklabels=False, ticks="", showgrid=False, zeroline=False
         )
     )
-    
     return fig
 
 
-def plot_mean_spectra(mean_spectra, plot_labels, y_limit):
+def plot_mean_spectra(mean_spectra, plot_labels, y_limit, unique_labels_order):
     fig = go.Figure()
 
-    for spectrum, label in zip(mean_spectra, plot_labels, strict=True):
-        padded_label = label + "      "   # 6 Leerzeichen Puffer
+    # 1. Exakt gleiche Farb-Generierung wie in der Heatmap
+    sorted_labels = sorted(unique_labels_order)
+    n_clusters = len(sorted_labels)
+    
+    # Farben aus Viridis ziehen (0.0 bis 1.0)
+    viridis_samples = np.linspace(0, 1, n_clusters)
+    current_colors = px.colors.sample_colorscale("Viridis", viridis_samples)
+
+    # Mapping erstellen: Label ID -> Viridis Farbe
+    # Wir mappen hier Strings auf Farben, z.B. -1 -> Farbe, 0 -> Farbe
+    label_to_color = {label: color for label, color in zip(sorted_labels, current_colors)}
+
+    for spectrum, label_text in zip(mean_spectra, plot_labels):
+        # ID aus dem Label-Text parsen
+        # Wir suchen jetzt nach "Cluster" ODER "Neuron"
+        try:
+            # (?:...) gruppiert ohne zu speichern (Cluster oder Neuron)
+            # \s* erlaubt Leerzeichen
+            # (-?\d+) fängt die Zahl (auch negativ)
+            match = re.search(r"(?:Cluster|Neuron)\s*(-?\d+)", label_text)
+            
+            if match:
+                found_id = int(match.group(1))
+                # Farbe aus dem Mapping holen, fallback auf schwarz
+                line_color = label_to_color.get(found_id, "black")
+            else:
+                # Fallback, falls das Format ganz anders ist
+                line_color = "black"
+                
+        except (AttributeError, ValueError):
+            line_color = "black" 
+
+        padded_label = label_text + "      " 
         
         fig.add_trace(
             go.Scatter(
                 x=spectrum.spectral_axis,
                 y=spectrum.spectral_data,
-                name=padded_label, # Hier das "gepolsterte" Label verwenden
-                line=dict(width=3)
+                name=padded_label,
+                line=dict(width=3, color=line_color) 
             )
         )
     
+    # Layout (unverändert)
     fig.update_layout(
         xaxis=dict(
             title="Raman Shift (cm⁻¹)",
@@ -135,14 +175,12 @@ def plot_mean_spectra(mean_spectra, plot_labels, y_limit):
             y=-0.3,
             xanchor="center",
             x=0.5,
-
         ),
         margin=dict(l=60, r=20, t=40, b=360),
         width=1000,
         height=700
     )
     return fig
-
 
 # --- Streamlit App ---
 
@@ -244,7 +282,7 @@ if results and results["success"]:
     st.subheader("Mittlere Spektren")
     if results.get("mean_spectra") is not None:
         fig_spectra = plot_mean_spectra(
-            results["mean_spectra"], results["plot_labels"], results["y_limit"]
+            results["mean_spectra"], results["plot_labels"], results["y_limit"], results["unique_labels"]
         )
         st.plotly_chart(fig_spectra)
     else:
