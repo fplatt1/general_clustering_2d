@@ -1,0 +1,9 @@
+kneed>=0.8.5
+matplotlib>=3.10.7
+numpy>=2.3.4
+plotly>=6.4.0
+ramanspy>=0.2.10
+scikit-learn>=1.7.2
+streamlit>=1.51.0
+
+# Note: PyInstaller is installed by the build script separately.

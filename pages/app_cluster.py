@@ -209,9 +209,21 @@ if uploaded_file is None:
 else:
     st.success(f"Datei '{uploaded_file.name}' geladen.")
 
-# Lese die Bytes der Datei
-file_bytes = uploaded_file.getvalue()
-results = analyze(file_bytes, analysis_method)
+# Lese die Bytes der Datei (sicherer Umgang, Fehler abfangen)
+try:
+    file_bytes = uploaded_file.getvalue()
+except Exception as e:
+    logging.exception("Fehler beim Lesen der hochgeladenen Datei")
+    st.error(f"Fehler beim Lesen der Datei: {e}")
+    st.stop()
+
+# Führe die Analyse aus und fange Ausnahmen, damit der Server nicht neu startet
+try:
+    results = analyze(file_bytes, analysis_method)
+except Exception as e:
+    logging.exception("Fehler während der Analyse")
+    results = {"success": False, "error": str(e)}
+    st.error(f"Analyse fehlgeschlagen: {e}")
 
 # --- Ergebnisse anzeigen ---
 st.header("2. Ergebnisse")

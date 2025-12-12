@@ -14,17 +14,29 @@ from sklearn.cluster import HDBSCAN, OPTICS, KMeans
 from sklearn.mixture import GaussianMixture
 
 uploaded_file = st.file_uploader("Choose a Witec file", type=["mat"])
-if uploaded_file is not None:
-    data = loadmat(uploaded_file)
-    data = [v for k, v in data.items() if k.startswith("Struct")][0]
-else:
-    root = Path(__file__).parent.parent
-    DATA = root / "data/P4-Raman-Scan-150x150um.mat"
+# Button to explicitly load the bundled sample data (avoid loading at import-time)
+load_sample = st.button("Load sample data")
 
-    data = loadmat(DATA)
-    # st.write(data)
-    data = data["Struct_ScanPiezo003SpecData1"]
-    # print(data)
+data = None
+if uploaded_file is not None:
+    try:
+        data = loadmat(uploaded_file)
+        data = [v for k, v in data.items() if k.startswith("Struct")][0]
+    except Exception as e:
+        st.error(f"Fehler beim Laden der hochgeladenen Datei: {e}")
+        st.stop()
+elif load_sample:
+    try:
+        root = Path(__file__).parent.parent
+        DATA = root / "data/P4-Raman-Scan-150x150um.mat"
+        data = loadmat(DATA)
+        data = data["Struct_ScanPiezo003SpecData1"]
+    except Exception as e:
+        st.error(f"Fehler beim Laden der Beispieldatei: {e}")
+        st.stop()
+else:
+    st.info("Bitte eine Datei hochladen oder 'Load sample data' drücken.")
+    st.stop()
 size = np.append(data["imagesize"][0, 0][0], data["data"][0, 0].shape[1])
 wavenumber = np.array(data["axisscale"][0, 0][1, 0][0])
 data = data["data"][0, 0]

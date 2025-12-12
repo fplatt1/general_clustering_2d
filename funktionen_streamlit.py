@@ -15,6 +15,7 @@ from sklearn.impute import SimpleImputer
 from joblib import Parallel, delayed
 from sklearn_som.som import SOM
 import multiprocessing
+from joblib.externals.loky.process_executor import TerminatedWorkerError
 import plotly.express as px
 import pandas as pd
 
@@ -78,7 +79,16 @@ def plot_3d_cluster_space(pca_scores, labels, algorithm_name, opacity=0.6):
     # Marker etwas kleiner machen für bessere Sichtbarkeit bei vielen Punkten
     fig.update_traces(marker=dict(size=3))
 
-    fig.show()
+    # In Streamlit-Umgebung: direkt mit Streamlit darstellen.
+    try:
+        import streamlit as st
+
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception:
+        # Fallback: gib das Figure-Objekt zurück (Aufrufer kann entscheiden).
+        pass
+
+    return fig
 
 def lorentzian(x, amplitude, center, width, offset):
     return offset + (amplitude * (width**2 / ((x - center)**2 + width**2)))
@@ -609,14 +619,37 @@ def run_feature_engineering_k_mean_analysis(file_bytes):
         graphen_spektren_daten = karte_graphen.spectral_data[graphen_mask_1d.reshape((h, w))] # type: ignore
         spectral_axis = karte_graphen.spectral_axis # type: ignore
         
-        num_cores = multiprocessing.cpu_count() 
-        logger.info(f"Nutze {num_cores} CPU-Kerne für {len(graphen_spektren_daten)} Spektren...")
-        
-        # Paralleler Aufruf von 'extrahiere_features_robust' für jedes Spektrum
-        feature_list = Parallel(n_jobs=num_cores)(
-            delayed(extrahiere_features_robust)(spectrum, spectral_axis) 
-            for spectrum in graphen_spektren_daten
-        )
+        # Begrenze die parallelen Jobs, um OOM/Worker-Abstürze zu vermeiden.
+        cpu_count = multiprocessing.cpu_count()
+        # Verwende maximal 4 Jobs oder alle verfügbaren Kerne, je nachdem, was kleiner ist.
+        num_cores = max(1, min(4, cpu_count))
+        logger.info(f"Nutze {num_cores} CPU-Kerne für {len(graphen_spektren_daten)} Spektren (begrenzte Parallelisierung zur Stabilität)...")
+
+        # Paralleler Aufruf von 'extrahiere_features_robust' in Batches,
+        # um Peak-Memory zu begrenzen und stabiler in der EXE zu laufen.
+        try:
+            feature_list = []
+            batch_size = 2000
+            total = len(graphen_spektren_daten)
+            for start in range(0, total, batch_size):
+                end = min(start + batch_size, total)
+                logger.info(f"  Verarbeite Batch {start}-{end} von {total} Spektren...")
+                batch = graphen_spektren_daten[start:end]
+                batch_features = Parallel(n_jobs=num_cores, backend="threading")(  # use threads in EXE
+                    delayed(extrahiere_features_robust)(spectrum, spectral_axis)
+                    for spectrum in batch
+                )
+                feature_list.extend(batch_features)
+        except TerminatedWorkerError as e:
+            logger.error(
+                "Ein Worker-Prozess ist abgestürzt. Fallback auf sequentielle Verarbeitung. Fehler: %s",
+                e,
+            )
+            # Retry sequentiell, um mehr Informationen zu sammeln und OOM zu vermeiden
+            feature_list = [extrahiere_features_robust(spectrum, spectral_axis) for spectrum in graphen_spektren_daten]
+        except Exception as e:
+            logger.exception("Unbekannter Fehler während der Parallel-Extraktion; versuche sequentiell. Fehler: %s", e)
+            feature_list = [extrahiere_features_robust(spectrum, spectral_axis) for spectrum in graphen_spektren_daten]
         
         feature_matrix = np.array(feature_list)
 
@@ -768,10 +801,11 @@ def run_pca_dbscan_analysis(file_bytes):
         logger.info("Starte Feature-Extraktion für DBSCAN-Analyse...")
         graphen_spektren_daten = karte_graphen.spectral_data[graphen_mask_1d.reshape((h, w))]  # type: ignore
         spectral_axis = karte_graphen.spectral_axis  # type: ignore
-        num_cores = multiprocessing.cpu_count()
-        logger.info(f"Nutze {num_cores} CPU-Kerne für {len(graphen_spektren_daten)} Spektren...")
+        cpu_count = multiprocessing.cpu_count()
+        num_cores = max(1, min(4, cpu_count))
+        logger.info(f"Nutze {num_cores} CPU-Kerne (Threads) für {len(graphen_spektren_daten)} Spektren...")
 
-        feature_list = Parallel(n_jobs=num_cores)(
+        feature_list = Parallel(n_jobs=num_cores, backend="threading")(  # use threads to avoid process spawn issues in EXE
             delayed(extrahiere_features_robust)(spectrum, spectral_axis)
             for spectrum in graphen_spektren_daten
         )
@@ -913,8 +947,9 @@ def run_feature_engineering_som_analysis(file_bytes):
         graphen_spektren_daten = karte_graphen.spectral_data[graphen_mask_1d.reshape((h, w))]   # type: ignore
         spectral_axis = karte_graphen.spectral_axis # type: ignore
         
-        num_cores = multiprocessing.cpu_count()
-        feature_list = Parallel(n_jobs=num_cores)(
+        cpu_count = multiprocessing.cpu_count()
+        num_cores = max(1, min(4, cpu_count))
+        feature_list = Parallel(n_jobs=num_cores, backend="threading")(  # use threads in EXE
             delayed(extrahiere_features_robust)(spectrum, spectral_axis) 
             for spectrum in graphen_spektren_daten
         )
