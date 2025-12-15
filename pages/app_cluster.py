@@ -89,7 +89,7 @@ def plot_cluster_map(cluster_map, unique_labels):
         )
     )
     
-    # 3. Layout (unverändert)
+    # 3. Layout anpassen
     fig.update_layout(
         height=base_height,
         width=calculated_width, 
@@ -209,7 +209,7 @@ if uploaded_file is None:
 else:
     st.success(f"Datei '{uploaded_file.name}' geladen.")
 
-# Lese die Bytes der Datei (sicherer Umgang, Fehler abfangen)
+# Lese die Bytes der Datei
 try:
     file_bytes = uploaded_file.getvalue()
 except Exception as e:
