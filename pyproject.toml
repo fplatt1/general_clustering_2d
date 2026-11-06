@@ -28,6 +28,4 @@ python = "./.venv"
 module-name = "bachelorarbeit"
 module-root = ""
 
-[build-system]
-requires = ["uv_build >= 0.8.0, <0.10.0"]
-build-backend = "uv_build"
+

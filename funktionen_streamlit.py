@@ -7,6 +7,7 @@ import ramanspy as rp
 from sklearn.decomposition import PCA as SklearnPCA
 from sklearn.preprocessing import StandardScaler
 from sklearn_som.som import SOM
+from scipy.io import loadmat
 import plotly.express as px
 import pandas as pd
 
@@ -58,6 +59,19 @@ def plot_3d_cluster_space(pca_scores, labels, algorithm_name, opacity=0.6):
 
     return fig
 
+def lade_spektralbild(pfad, laser_excitation=488.047, achse="auto"):
+    """Laedt eine wip2mat-.mat (oder faellt auf rp.load.witec zurueck)."""
+    d = loadmat(pfad)
+    if "spectra" not in d:                       # WITec-Originalexport
+        return rp.load.witec(pfad, laser_excitation=laser_excitation)
+
+    spectra = np.asarray(d["spectra"], dtype=float)      # (h, w, n)
+    if achse == "auto":
+        achse = "raman_shift" if d.get("raman_shift", np.empty(0)).size else "wavelength_nm"
+    x = np.asarray(d[achse], dtype=float).squeeze()
+
+    order = np.argsort(x)                        # Achse aufsteigend sortieren
+    return rp.SpectralImage(spectra[..., order], x[order])
 
 def Laden_Vorverarbeitung(Dateipfad):
     """
@@ -65,7 +79,7 @@ def Laden_Vorverarbeitung(Dateipfad):
     Kein Cropping auf spezifische Bereiche mehr.
     """
     logger.info("Starte generische Vorverarbeitung...")
-    raman_image = rp.load.witec(Dateipfad, laser_excitation=488.047) 
+    raman_image = lade_spektralbild(Dateipfad, laser_excitation=488.047)
     
     pipeline = rp.preprocessing.Pipeline(
         [
