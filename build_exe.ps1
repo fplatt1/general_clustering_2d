@@ -26,15 +26,12 @@ Write-Host "Upgrading pip and installing build dependencies..."
 & "$VenvName\Scripts\python.exe" -m pip install --upgrade pip
 & "$VenvName\Scripts\python.exe" -m pip install -r requirements.txt pyinstaller
 
-# Files and folders to include inside the frozen app under sys._MEIPASS/app_content
+# Files to include inside the frozen app under sys._MEIPASS/app_content
 $addData = @(
     "app.py;app_content",
     "funktionen_streamlit.py;app_content",
     "run_app.py;app_content",
-    "pages;app_content/pages",
-    "bachelorarbeit;app_content/bachelorarbeit",
-    "funktionen;app_content/funktionen",
-    "data;app_content/data",
+    ".streamlit;app_content/.streamlit",
     "README.md;app_content/README.md"
 )
 

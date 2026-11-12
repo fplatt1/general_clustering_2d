@@ -3,9 +3,7 @@ import numpy as np
 import streamlit as st
 from plotly import graph_objs as go
 import plotly.express as px
-import re
 
-# Ersetze den alten try-except Block komplett durch diese Zeile:
 from funktionen_streamlit import run_pca_som_analysis
 
 LOG_FILE = "log.txt"
@@ -90,34 +88,20 @@ def plot_cluster_map(cluster_map, unique_labels):
     return fig
 
 
-def plot_mean_spectra(mean_spectra, plot_labels, y_limit, unique_labels_order):
+def plot_mean_spectra(mean_spectra, plot_labels, label_values, y_limit, unique_labels_order):
     fig = go.Figure()
 
     # Exakt gleiche Farb-Generierung wie in der Heatmap für Konsistenz
     sorted_labels = sorted(unique_labels_order)
     n_clusters = len(sorted_labels)
-    
+
     viridis_samples = np.linspace(0, 1, n_clusters)
     current_colors = px.colors.sample_colorscale("Viridis", viridis_samples)
     label_to_color = {label: color for label, color in zip(sorted_labels, current_colors)}
 
-    for spectrum, label_text in zip(mean_spectra, plot_labels):
-        try:
-            # Filtert, ob es sich um den Hintergrund oder ein Neuron handelt
-            if "Hintergrund" in label_text:
-                found_id = -1
-            else:
-                match = re.search(r"Neuron\s*(-?\d+)", label_text)
-                found_id = int(match.group(1)) if match else None
-                
-            if found_id is not None:
-                line_color = label_to_color.get(found_id, "black")
-            else:
-                line_color = "black"
-                
-        except (AttributeError, ValueError):
-            line_color = "black" 
-
+    for spectrum, label_text, label_value in zip(mean_spectra, plot_labels, label_values):
+        # Gleiche Farben wie in der Heatmap, direkt über den Label-Wert gekoppelt
+        line_color = label_to_color.get(label_value, "black")
         padded_label = label_text + "      " 
         
         fig.add_trace(
@@ -208,7 +192,14 @@ with st.expander("Analyse-Log anzeigen (Terminal-Ausgabe)"):
 if results and results["success"]:
     st.success("Analyse erfolgreich abgeschlossen!")
 
-    # 1. Cluster-Karte (Heatmap)
+    # 1. 3D-PCA-Merkmalsraum
+    st.subheader("3D-PCA-Merkmalsraum")
+    if results.get("pca_fig") is not None:
+        st.plotly_chart(results["pca_fig"], use_container_width=True)
+    else:
+        st.warning("Kein 3D-PCA-Plot verfügbar.")
+
+    # 2. Cluster-Karte (Heatmap)
     st.subheader("Ortsaufgelöste Cluster-Karte")
     if results.get("cluster_map") is not None:
         fig_map = plot_cluster_map(
@@ -218,17 +209,19 @@ if results and results["success"]:
     else:
         st.warning("Keine Cluster-Karte verfügbar.")
 
-    # 2. Mittlere Spektren
+    # 3. Mittlere Spektren
     st.subheader("Mittlere Spektren der Neuronen")
     if results.get("mean_spectra") is not None:
         fig_spectra = plot_mean_spectra(
-            results["mean_spectra"], results["plot_labels"], results["y_limit"], results["unique_labels"]
+            results["mean_spectra"],
+            results["plot_labels"],
+            results["unique_labels"],
+            results["y_limit"],
+            results["unique_labels"],
         )
         st.plotly_chart(fig_spectra)
     else:
         st.warning("Keine Spektren verfügbar.")
-        
-    st.info("💡 Hinweis: Die interaktive 3D-Visualisierung des PCA-Merkmalsraums wurde weiter oben nativ ausgegeben.")
 
 elif results and not results.get("success", False):
     st.error(f"Analyse fehlgeschlagen. Fehler: {results.get('error', 'Unbekannter Fehler')}")

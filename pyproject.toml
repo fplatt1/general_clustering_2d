@@ -1,12 +1,10 @@
 [project]
 name = "bachelorarbeit"
 version = "0.1.0"
-description = "Add your description here"
+description = "Automatisierte PCA + SOM Analyse von Raman-Spektralbildern (.mat)"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-  "kneed>=0.8.5",
-  "matplotlib>=3.10.7",
   "numpy>=2.3.4",
   "pandas>=3.0.3",
   "plotly>=6.4.0",

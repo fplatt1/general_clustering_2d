@@ -51,16 +51,10 @@ def plot_3d_cluster_space(pca_scores, labels, algorithm_name, opacity=0.6):
     
     fig.update_traces(marker=dict(size=3))
 
-    try:
-        import streamlit as st
-        st.plotly_chart(fig, use_container_width=True)
-    except Exception:
-        pass
-
     return fig
 
 def lade_spektralbild(pfad, laser_excitation=488.047, achse="auto"):
-    """Laedt eine wip2mat-.mat (oder faellt auf rp.load.witec zurueck)."""
+    """Laedt eine .mat-Datei mit 'spectra'-Variable (oder faellt auf rp.load.witec zurueck)."""
     d = loadmat(pfad)
     if "spectra" not in d:                       # WITec-Originalexport
         return rp.load.witec(pfad, laser_excitation=laser_excitation)
@@ -148,8 +142,8 @@ def run_pca_som_analysis(file_bytes, map_height=3, map_width=3):
         
         logger.info("SOM-Training abgeschlossen.")
 
-        # Visualisiere den PCA-Raum
-        plot_3d_cluster_space(scores_np, cluster_labels, "Reine PCA + SOM")
+        # Baue die 3D-Visualisierung des PCA-Raums (wird von der App gerendert)
+        pca_fig = plot_3d_cluster_space(scores_np, cluster_labels, "Reine PCA + SOM")
 
         # --- 5. ERGEBNISSE ZUSAMMENFÜHREN ---
         final_cluster_map_1d = np.full(h*w, np.nan)
@@ -197,6 +191,7 @@ def run_pca_som_analysis(file_bytes, map_height=3, map_width=3):
             "mean_spectra": mean_spectra,
             "plot_labels": finale_plot_labels,
             "y_limit": plot_ylim,
+            "pca_fig": pca_fig,
             "map_title": f"Cluster-Karte (SOM {map_height}x{map_width})"
         }
 
