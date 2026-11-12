@@ -59,8 +59,8 @@ def plot_cluster_map(cluster_map, unique_labels):
                 tickfont=dict(size=20),
                 tickmode='array',
                 tickvals=[x + 0.5 for x in range(n_clusters)], 
-                # Schöne Beschriftung der Legende (Hintergrund vs. Neuron)
-                ticktext=["Hintergrund" if l == -1 else f"Neuron {int(l)}" for l in unique_sorted],  
+                # Legend labels (Background vs. Neuron)
+                ticktext=["Background" if l == -1 else f"Neuron {int(l)}" for l in unique_sorted],  
                 xpad=0,
                 thickness=40,
                 len=1.0
@@ -142,75 +142,75 @@ def plot_mean_spectra(mean_spectra, plot_labels, label_values, y_limit, unique_l
 # --- Streamlit Hauptanwendung ---
 
 st.set_page_config(layout="wide")
-st.title("🔬 Universelle Raman-Karten Analyse (Reine PCA + SOM)")
+st.title("🔬 Universal Raman Map Analysis (PCA + SOM)")
 
-# Sidebar für SOM-Parameter
-st.sidebar.header("SOM-Einstellungen")
-map_height = st.sidebar.slider("SOM Gitter-Höhe (m)", min_value=1, max_value=5, value=3)
-map_width = st.sidebar.slider("SOM Gitter-Breite (n)", min_value=1, max_value=5, value=3)
+# Sidebar for SOM parameters
+st.sidebar.header("SOM Settings")
+map_height = st.sidebar.slider("SOM grid height (m)", min_value=1, max_value=5, value=3)
+map_width = st.sidebar.slider("SOM grid width (n)", min_value=1, max_value=5, value=3)
 
-# Hauptbereich für Datei-Upload
-st.header("1. Raman-Karte hochladen")
-uploaded_file = st.file_uploader("Wähle eine .mat-Datei (Witec)", type=["mat"])
+# Main area for file upload
+st.header("1. Upload Raman Map")
+uploaded_file = st.file_uploader("Select a .mat file (WITec)", type=["mat"])
 
 if uploaded_file is None:
-    st.info("Bitte eine `.mat`-Datei hochladen, um die automatisierte Analyse zu starten.")
+    st.info("Please upload a `.mat` file to start the automated analysis.")
     st.stop()
 else:
-    st.success(f"Datei '{uploaded_file.name}' erfolgreich geladen.")
+    st.success(f"File '{uploaded_file.name}' loaded successfully.")
 
 # Lese die Bytes der Datei
 try:
     file_bytes = uploaded_file.getvalue()
 except Exception as e:
-    logging.exception("Fehler beim Lesen der hochgeladenen Datei")
-    st.error(f"Fehler beim Lesen der Datei: {e}")
+    logging.exception("Error reading the uploaded file")
+    st.error(f"Error reading file: {e}")
     st.stop()
 
 # Führe die Analyse automatisch bei Datei-Upload oder Parameter-Änderung aus
 try:
-    with st.spinner("Berechne automatische PCA und trainiere Self-Organizing Map..."):
+    with st.spinner("Computing PCA and training Self-Organizing Map..."):
         results = analyze(file_bytes, map_height, map_width)
 except Exception as e:
-    logging.exception("Fehler während der Analyse")
+    logging.exception("Error during analysis")
     results = {"success": False, "error": str(e)}
-    st.error(f"Analyse fehlgeschlagen: {e}")
+    st.error(f"Analysis failed: {e}")
 
-# --- Ergebnisse anzeigen ---
-st.header("2. Ergebnisse")
+# --- Show results ---
+st.header("2. Results")
 
-# Zeige das Analyse-Log in einem ausklappbaren Bereich
-with st.expander("Analyse-Log anzeigen (Terminal-Ausgabe)"):
+# Show the analysis log in a collapsible section
+with st.expander("Show analysis log"):
     try:
         with open(LOG_FILE) as f:
             logs = f.read()
         st.text_area("Log", logs, height=300)
     except Exception:
-        st.write("Kein Log-Protokoll verfügbar.")
+        st.write("No log available.")
 
-# --- HAUPT-ERGEBNIS LOGIK ---
+# --- MAIN RESULTS LOGIC ---
 if results and results["success"]:
-    st.success("Analyse erfolgreich abgeschlossen!")
+    st.success("Analysis completed successfully!")
 
-    # 1. 3D-PCA-Merkmalsraum
-    st.subheader("3D-PCA-Merkmalsraum")
+    # 1. 3D PCA feature space
+    st.subheader("3D PCA Feature Space")
     if results.get("pca_fig") is not None:
         st.plotly_chart(results["pca_fig"], use_container_width=True)
     else:
-        st.warning("Kein 3D-PCA-Plot verfügbar.")
+        st.warning("No 3D PCA plot available.")
 
-    # 2. Cluster-Karte (Heatmap)
-    st.subheader("Ortsaufgelöste Cluster-Karte")
+    # 2. Cluster map (heatmap)
+    st.subheader("Spatial Cluster Map")
     if results.get("cluster_map") is not None:
         fig_map = plot_cluster_map(
             results["cluster_map"], results["unique_labels"]
         )
         st.plotly_chart(fig_map)
     else:
-        st.warning("Keine Cluster-Karte verfügbar.")
+        st.warning("No cluster map available.")
 
-    # 3. Mittlere Spektren
-    st.subheader("Mittlere Spektren der Neuronen")
+    # 3. Mean spectra
+    st.subheader("Mean Spectra of Neurons")
     if results.get("mean_spectra") is not None:
         fig_spectra = plot_mean_spectra(
             results["mean_spectra"],
@@ -221,7 +221,7 @@ if results and results["success"]:
         )
         st.plotly_chart(fig_spectra)
     else:
-        st.warning("Keine Spektren verfügbar.")
+        st.warning("No spectra available.")
 
 elif results and not results.get("success", False):
-    st.error(f"Analyse fehlgeschlagen. Fehler: {results.get('error', 'Unbekannter Fehler')}")
+    st.error(f"Analysis failed. Error: {results.get('error', 'Unknown error')}")

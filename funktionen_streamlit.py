@@ -21,7 +21,7 @@ def plot_3d_cluster_space(pca_scores, labels, algorithm_name, opacity=0.6):
     
     # Label -1 als Hintergrund deklarieren
     labels_str = labels.astype(str)
-    labels_str = np.where(labels_str == '-1', 'Hintergrund (-1)', labels_str)
+    labels_str = np.where(labels_str == '-1', 'Background (-1)', labels_str)
         
     df['Cluster'] = labels_str
     df = df.sort_values('Cluster')
@@ -32,8 +32,8 @@ def plot_3d_cluster_space(pca_scores, labels, algorithm_name, opacity=0.6):
         y='PC2', 
         z='PC3',
         color='Cluster',
-        title=f'3D-Merkmalsraum: {algorithm_name}',
-        labels={'PC1': 'Hauptkomponente 1', 'PC2': 'Hauptkomponente 2', 'PC3': 'Hauptkomponente 3'},
+        title=f'3D Feature Space: {algorithm_name}',
+        labels={'PC1': 'Principal Component 1', 'PC2': 'Principal Component 2', 'PC3': 'Principal Component 3'},
         opacity=opacity,
         color_discrete_sequence=px.colors.qualitative.G10 
     )
@@ -72,7 +72,7 @@ def Laden_Vorverarbeitung(Dateipfad):
     Lädt die Witec-Datei und wendet eine generische Vorverarbeitung an.
     Kein Cropping auf spezifische Bereiche mehr.
     """
-    logger.info("Starte generische Vorverarbeitung...")
+    logger.info("Starting generic preprocessing...")
     raman_image = lade_spektralbild(Dateipfad, laser_excitation=488.047)
     
     pipeline = rp.preprocessing.Pipeline(
@@ -94,9 +94,9 @@ def Laden_Vorverarbeitung(Dateipfad):
     valid_mask_1d = np.sum(np.abs(flat_spectra), axis=1) > 1e-6
 
     if np.sum(valid_mask_1d) == 0:
-        raise ValueError("Keine gültigen Spektren nach der Vorverarbeitung gefunden.")
-        
-    logger.info(f"Anzahl der gültigen Spektren gefunden: {np.sum(valid_mask_1d)}")
+        raise ValueError("No valid spectra found after preprocessing.")
+
+    logger.info(f"Number of valid spectra found: {np.sum(valid_mask_1d)}")
 
     return valid_mask_1d, raman_image, h, w
 
@@ -118,20 +118,20 @@ def run_pca_som_analysis(file_bytes, map_height=3, map_width=3):
         valid_spectra = flat_spectra[valid_mask_1d]
 
         # --- 2. DATEN SKALIEREN ---
-        logger.info("Skaliere Spektren (StandardScaler)...")
+        logger.info("Scaling spectra (StandardScaler)...")
         scaler = StandardScaler()
         scaled_spectra = scaler.fit_transform(valid_spectra)
 
         # --- 3. REINE PCA AUF SPEKTREN ---
-        logger.info("Starte PCA auf den vorverarbeiteten Spektraldaten...")
+        logger.info("Starting PCA on the preprocessed spectral data...")
         pca = SklearnPCA(n_components=0.95, svd_solver='full', random_state=42)
         scores_np = pca.fit_transform(scaled_spectra)
-        
+
         optimal_pcs_gefunden = pca.n_components_
-        logger.info(f"PCA abgeschlossen. {optimal_pcs_gefunden} PCs erklären 95% der Varianz.")
+        logger.info(f"PCA complete. {optimal_pcs_gefunden} PCs explain 95% of the variance.")
 
         # --- 4. SOM CLUSTERING ---
-        logger.info(f"Starte SOM-Training ({map_height}x{map_width})...")
+        logger.info(f"Starting SOM training ({map_height}x{map_width})...")
         
         # Initialisiere SOM mit den Dimensionen der optimalen PCs
         som = SOM(m=map_height, n=map_width, dim=optimal_pcs_gefunden, lr=0.5, random_state=42)
@@ -140,10 +140,10 @@ def run_pca_som_analysis(file_bytes, map_height=3, map_width=3):
         som.fit(scores_np, epochs=5) 
         cluster_labels = som.predict(scores_np)
         
-        logger.info("SOM-Training abgeschlossen.")
+        logger.info("SOM training complete.")
 
-        # Baue die 3D-Visualisierung des PCA-Raums (wird von der App gerendert)
-        pca_fig = plot_3d_cluster_space(scores_np, cluster_labels, "Reine PCA + SOM")
+        # Build the 3D visualization of the PCA space (rendered by the app)
+        pca_fig = plot_3d_cluster_space(scores_np, cluster_labels, "PCA + SOM")
 
         # --- 5. ERGEBNISSE ZUSAMMENFÜHREN ---
         final_cluster_map_1d = np.full(h*w, np.nan)
@@ -171,7 +171,7 @@ def run_pca_som_analysis(file_bytes, map_height=3, map_width=3):
                 
                 # Generische Benennung
                 if label == BACKGROUND_LABEL:
-                    finale_plot_labels.append("Hintergrund / Rauschen")
+                    finale_plot_labels.append("Background / Noise")
                 else:
                     finale_plot_labels.append(f"Neuron {int(label)}")
         
@@ -192,11 +192,11 @@ def run_pca_som_analysis(file_bytes, map_height=3, map_width=3):
             "plot_labels": finale_plot_labels,
             "y_limit": plot_ylim,
             "pca_fig": pca_fig,
-            "map_title": f"Cluster-Karte (SOM {map_height}x{map_width})"
+            "map_title": f"Cluster Map (SOM {map_height}x{map_width})"
         }
 
     except Exception as e:
-        logger.error(f"FEHLER bei der PCA/SOM Analyse: {e}")
+        logger.error(f"ERROR during PCA/SOM analysis: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return {"success": False, "error": str(e)}
